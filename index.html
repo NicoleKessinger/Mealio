@@ -71,8 +71,8 @@
   .copy-btn:disabled{background:var(--border);color:var(--ink3);cursor:default}
   .manage-btn{background:var(--cream);color:var(--ink2);border:1px solid var(--border);border-radius:10px;padding:13px 14px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;white-space:nowrap}
   .manage-btn:hover{background:var(--border)}
-  .new-week-btn{background:var(--cream);color:var(--ink3);border:1px solid var(--border);border-radius:10px;padding:13px 12px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;white-space:nowrap}
-  .new-week-btn:hover{background:var(--rust-light);color:var(--rust);border-color:#DBA898}
+  .new-week-btn{background:none;color:var(--ink3);border:none;border-radius:10px;padding:13px 10px;font-size:18px;cursor:pointer;line-height:1;flex-shrink:0}
+  .new-week-btn:hover{color:var(--rust)}
   .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--ink);color:var(--white);padding:10px 20px;border-radius:20px;font-size:13px;transition:transform .3s;z-index:200;white-space:nowrap}
   .toast.show{transform:translateX(-50%) translateY(0)}
   .sync-badge{font-size:10px;color:var(--ink3);display:flex;align-items:center;gap:4px;margin-top:2px}
@@ -202,6 +202,14 @@
   .editor-cancel{background:var(--cream);color:var(--ink2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer}
   .editor-save{flex:1;background:var(--ink);color:var(--white);border:none;border-radius:10px;padding:13px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer}
   .editor-save:hover{background:var(--ink2)}
+  /* modal handle + close */
+  .modal-handle-bar{display:flex;align-items:center;justify-content:center;padding:12px 20px 4px;position:relative;flex-shrink:0}
+  .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px}
+  .modal-x-btn{position:absolute;right:16px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--ink3);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;border-radius:6px}
+  .modal-x-btn:hover{background:var(--cream);color:var(--ink)}
+  /* view recipe expand */
+  .meal-view-ings{display:none;font-size:12px;color:var(--ink2);line-height:1.9;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+  .meal-view-ings.open{display:block}
 </style>
 </head>
 <body>
@@ -243,8 +251,8 @@
 
 <div class="footer">
   <button class="manage-btn" onclick="openModal()">My meals</button>
-  <button class="copy-btn" id="copy-btn" onclick="copyList()" disabled>Copy for Reminders</button>
-  <button class="new-week-btn" onclick="confirmNewWeek()">↺ New week</button>
+  <button class="copy-btn" id="copy-btn" onclick="copyList()" disabled>Copy list</button>
+  <button class="new-week-btn" onclick="confirmNewWeek()" title="Start a new week">↺</button>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -262,6 +270,10 @@
 
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
   <div class="modal">
+    <div class="modal-handle-bar">
+      <div class="modal-handle"></div>
+      <button class="modal-x-btn" onclick="closeModal()">×</button>
+    </div>
     <div class="modal-scroll">
       <div class="modal-title">My meal library</div>
       <p class="modal-hint">Tap "+ Add" to add to this week's list. Tap "edit" to update a meal.</p>
@@ -522,7 +534,7 @@ function toSentenceCase(s) { if (!s) return s; return s.charAt(0).toUpperCase() 
 function buildColorMap() { mealColorMap = {}; addedMeals.forEach((m,i) => { mealColorMap[m] = TAG_COLORS[i % TAG_COLORS.length]; }); }
 
 // ── TAB / UI ──
-function switchTab(tab, btn) { document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active')); document.getElementById('panel-' + tab).classList.add('active'); hideSuggestions(); }
+function switchTab(tab, btn) { document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active')); document.getElementById('panel-' + tab).classList.add('active'); hideSuggestions(); localStorage.setItem('mealio_tab', tab); }
 function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2800); }
 function setLoading(btnId, loading, defaultText) { const btn = document.getElementById(btnId); if (!btn) return; btn.disabled = loading; btn.innerHTML = loading ? `<span class="btn-spinner"></span>${defaultText.replace('→','').trim()}ing…` : defaultText; }
 
@@ -537,8 +549,11 @@ function startNewWeek() {
 
 // ── MEAL MANAGEMENT ──
 function addMeal() {
-  const input = document.getElementById('meal-input'); const val = input.value.trim().toLowerCase(); hideSuggestions(); if (!val) return;
-  if (!meals[val]) { showToast(`"${val}" not in library — add via My Meals`); return; }
+  const input = document.getElementById('meal-input'); let val = input.value.trim().toLowerCase(); hideSuggestions(); if (!val) return;
+  if (!meals[val]) {
+    const match = Object.keys(meals).find(m => m.includes(val));
+    if (match) { val = match; } else { showToast(`"${val}" not in library — add via My Meals`); return; }
+  }
   if (addedMeals.includes(val)) { showToast(`${val} already added`); input.value = ''; return; }
   addedMeals.push(val); input.value = ''; persistAll(); buildColorMap(); renderChips(); renderList();
 }
@@ -633,7 +648,30 @@ function renderList() {
 function renderModalMeals() {
   const el = document.getElementById('modal-meal-list'); const entries = Object.entries(meals);
   if (!entries.length) { el.innerHTML = '<p style="font-size:13px;color:var(--ink3);font-style:italic;margin-bottom:8px">No meals yet. Add your first one below.</p>'; return; }
-  el.innerHTML = entries.map(([name,ings],i) => { const c = TAG_COLORS[i % TAG_COLORS.length]; const inList = addedMeals.includes(name); return `<div class="modal-meal"><div class="modal-meal-header"><span class="modal-meal-name">${name}<span class="modal-tag-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${toTag(name)}</span>${inList ? `<span class="modal-tag-chip" style="background:#EAF3DE;color:#3B6D11;border:1px solid #B8CEB0">on list</span>` : ''}</span><div class="modal-meal-actions">${!inList ? `<button style="background:var(--sage);color:white;border:none;border-radius:6px;padding:3px 10px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer" onclick="addMealFromLibrary('${name.replace(/'/g,"\\'")}')">+ Add</button>` : ''}<button class="modal-meal-edit" onclick="editMeal('${name.replace(/'/g,"\\'")}')">edit</button><button class="modal-meal-del" onclick="deleteMeal('${name.replace(/'/g,"\\'")}')">delete</button></div></div><div class="modal-ingredients">${ings.slice(0,6).join(' · ')}${ings.length > 6 ? ` · +${ings.length-6} more` : ''}</div><div class="modal-ing-count">${ings.length} ingredient${ings.length !== 1 ? 's' : ''}</div></div>`; }).join('');
+  el.innerHTML = entries.map(([name,ings],i) => {
+    const c = TAG_COLORS[i % TAG_COLORS.length]; const inList = addedMeals.includes(name);
+    const viewId = 'meal-view-' + name.replace(/[^a-z0-9]/g,'_');
+    return `<div class="modal-meal">
+      <div class="modal-meal-header">
+        <span class="modal-meal-name">${name}<span class="modal-tag-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${toTag(name)}</span>${inList ? `<span class="modal-tag-chip" style="background:#EAF3DE;color:#3B6D11;border:1px solid #B8CEB0">on list</span>` : ''}</span>
+        <div class="modal-meal-actions">
+          ${!inList ? `<button style="background:var(--sage);color:white;border:none;border-radius:6px;padding:3px 10px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer" onclick="addMealFromLibrary('${name.replace(/'/g,"\\'")}')">+ Add</button>` : ''}
+          <button class="modal-meal-edit" onclick="toggleMealView('${viewId}',this)">view</button>
+          <button class="modal-meal-edit" onclick="editMeal('${name.replace(/'/g,"\\'")}')">edit</button>
+          <button class="modal-meal-del" onclick="deleteMeal('${name.replace(/'/g,"\\'")}')">delete</button>
+        </div>
+      </div>
+      <div class="modal-ingredients">${ings.slice(0,5).join(' · ')}${ings.length > 5 ? ` · +${ings.length-5} more` : ''}</div>
+      <div class="meal-view-ings" id="${viewId}">${ings.map(ing => `<div>· ${esc(toSentenceCase(ing))}</div>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleMealView(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.classList.toggle('open');
+  btn.textContent = open ? 'hide' : 'view';
 }
 
 // ── MODAL ──
@@ -815,6 +853,11 @@ document.addEventListener('click', e => { if (!e.target.closest('.header')) hide
   setSyncStatus('connecting');
   await loadFromFirestore();
   buildColorMap(); renderChips(); renderList();
+  const savedTab = localStorage.getItem('mealio_tab');
+  if (savedTab === 'item') {
+    const btn = document.querySelectorAll('.tab')[1];
+    if (btn) switchTab('item', btn);
+  }
 })();
 </script>
 </body>
