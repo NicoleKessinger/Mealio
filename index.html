@@ -398,11 +398,7 @@ function setSyncStatus(state) {
 // ── FIRESTORE HELPERS ──
 // We store everything under a single anonymous shared document for now.
 // To make it per-user, swap DEVICE_ID for a Firebase Auth UID later.
-const DEVICE_ID = (() => {
-  let id = localStorage.getItem('grocery_device_id');
-  if (!id) { id = 'user_' + Math.random().toString(36).slice(2, 10); localStorage.setItem('grocery_device_id', id); }
-  return id;
-})();
+const DEVICE_ID = 'mealio_shared';;
 const docRef = db ? db.collection('grocery_users').doc(DEVICE_ID) : null;
 
 async function saveToFirestore(data) {
