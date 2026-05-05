@@ -497,21 +497,31 @@ async function loadConfig() {
   }
 }
 
-async function callGemini(parts, maxTokens = 1500) {
+async function callGemini(parts, maxTokens = 2048) {
   if (!geminiApiKey) throw new Error('AI features unavailable — config not loaded');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-  const body = {
-    contents: [{ parts }],
-    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
-  };
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const d = await r.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  let r, d;
+  try {
+    r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 } }),
+      signal: controller.signal
+    });
+    d = await r.json();
+  } catch(e) {
+    if (e.name === 'AbortError') throw new Error('Request timed out — try again');
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!r.ok) throw new Error(d.error?.message || `API ${r.status}`);
-  return d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const candidate = d.candidates?.[0];
+  if (!candidate) throw new Error('No response received from Gemini');
+  if (candidate.finishReason === 'SAFETY') throw new Error('Response blocked by safety filter — try rephrasing');
+  return candidate.content?.parts?.[0]?.text || '';
 }
 
 function parseJSON(t) {
@@ -520,8 +530,15 @@ function parseJSON(t) {
   const end = cleaned.lastIndexOf('}');
   if (start === -1 || end === -1) throw new Error('No JSON object found in response');
   const jsonStr = cleaned.slice(start, end + 1)
-    .replace(/,\s*([}\]])/g, '$1');  // strip trailing commas
+    .replace(/,\s*([}\]])/g, '$1');
   return JSON.parse(jsonStr);
+}
+
+function validateRecipe(recipe) {
+  if (!recipe || typeof recipe !== 'object') throw new Error('Invalid recipe format');
+  if (!recipe.name || typeof recipe.name !== 'string') throw new Error('Recipe is missing a name');
+  if (!Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) throw new Error('Recipe is missing ingredients');
+  return recipe;
 }
 
 const EXTRACT_PROMPT = `Extract the recipe from this content. Return ONLY valid JSON:
@@ -803,6 +820,14 @@ function openEditorFromManual() {
 // ── GEMINI AI FEATURES ──
 function onPhotoSelected(input) {
   const file = input.files[0]; if (!file) return;
+  if (file.type === 'image/heic' || file.type === 'image/heif') {
+    showToast('HEIC not supported — export as JPG or PNG first');
+    input.value = ''; return;
+  }
+  if (file.size > 4 * 1024 * 1024) {
+    showToast('Photo too large — please use an image under 4MB');
+    input.value = ''; return;
+  }
   currentPhotoMimeType = file.type || 'image/jpeg';
   const reader = new FileReader();
   reader.onload = e => { currentPhotoBase64 = e.target.result.split(',')[1]; const p = document.getElementById('photo-preview'); p.src=e.target.result; p.style.display='block'; document.getElementById('scan-btn').style.display='flex'; };
@@ -817,28 +842,19 @@ async function scanPhoto() {
       { inline_data: { mime_type: currentPhotoMimeType, data: currentPhotoBase64 } },
       { text: EXTRACT_PROMPT }
     ]);
-    openEditor(parseJSON(text));
-  } catch(e) { showToast('Scan failed — try a clearer photo'); console.error(e); }
+    openEditor(validateRecipe(parseJSON(text)));
+  } catch(e) { showToast(`Scan failed: ${e.message}`); console.error(e); }
   finally { setLoading('scan-btn', false, 'Extract ingredients →'); }
 }
 
-async function fetchFromUrl() {
-  const url = document.getElementById('link-url').value.trim(); if (!url) { showToast('Paste a URL first'); return; }
-  setLoading('fetch-btn', true, 'Extract from URL →');
-  try {
-    const text = await callGemini([{ text: `Fetch and extract the recipe from: ${url}\n\n${EXTRACT_PROMPT}` }]);
-    openEditor(parseJSON(text));
-  } catch(e) { showToast('Could not read that URL — try pasting the text instead'); }
-  finally { setLoading('fetch-btn', false, 'Extract from URL →'); }
-}
 
 async function extractFromText() {
   const text = document.getElementById('link-text').value.trim(); if (!text) { showToast('Paste some recipe text first'); return; }
   setLoading('link-extract-btn', true, 'Extract ingredients →');
   try {
     const result = await callGemini([{ text: `Recipe content:\n\n${text}\n\n${EXTRACT_PROMPT}` }]);
-    openEditor(parseJSON(result));
-  } catch(e) { showToast('Extraction failed — try again'); console.error(e); }
+    openEditor(validateRecipe(parseJSON(result)));
+  } catch(e) { showToast(`Extraction failed: ${e.message}`); console.error(e); }
   finally { setLoading('link-extract-btn', false, 'Extract ingredients →'); }
 }
 
@@ -849,7 +865,7 @@ async function generateRecipe() {
   setLoading('gen-btn', true, 'Create recipe →');
   try {
     const text = await callGemini([{ text: GENERATE_PROMPT(query) }]);
-    openEditor(parseJSON(text));
+    openEditor(validateRecipe(parseJSON(text)));
   } catch(e) { showToast(`Failed: ${e.message}`); console.error(e); }
   finally { setLoading('gen-btn', false, 'Create recipe →'); }
 }
