@@ -514,7 +514,13 @@ async function callGemini(parts, maxTokens = 1500) {
   return d.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-function parseJSON(t) { return JSON.parse(t.replace(/```json|```/g, '').trim()); }
+function parseJSON(t) {
+  const cleaned = t.replace(/```json\s*|```\s*/g, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('No JSON object found in response');
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
 
 const EXTRACT_PROMPT = `Extract the recipe from this content. Return ONLY valid JSON:
 {"name":"Recipe Name","servings":2,"time":"30 minutes","ingredients":[{"amount":"2","unit":"fillets","item":"salmon"},{"amount":"1","unit":"cup","item":"sushi rice"}],"steps":["Step one.","Step two."]}
