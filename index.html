@@ -486,15 +486,26 @@ function persistAll() {
 }
 
 // ── GEMINI AI ──
-const GEMINI_API_KEY = 'GEMINI_KEY_PLACEHOLDER'; // Replace with your Vertex AI / Gemini API key
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+let geminiApiKey = null;
+
+async function loadConfig() {
+  if (!db) return;
+  try {
+    const snap = await db.collection('config').doc('api').get();
+    if (snap.exists) geminiApiKey = snap.data().gemini_key || null;
+  } catch(e) {
+    console.warn('Could not load config:', e);
+  }
+}
 
 async function callGemini(parts, maxTokens = 1500) {
+  if (!geminiApiKey) throw new Error('AI features unavailable — config not loaded');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
   const body = {
     contents: [{ parts }],
     generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
   };
-  const r = await fetch(GEMINI_URL, {
+  const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -876,7 +887,7 @@ document.addEventListener('click', e => { if (!e.target.closest('.header')) hide
 // ── INIT: load from Firestore then render ──
 (async () => {
   setSyncStatus('connecting');
-  await loadFromFirestore();
+  await Promise.all([loadFromFirestore(), loadConfig()]);
   buildColorMap(); renderChips(); renderList();
   const savedTab = localStorage.getItem('mealio_tab');
   if (savedTab === 'item') {
