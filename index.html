@@ -486,12 +486,18 @@ function persistAll() {
 let geminiApiKey = null;
 
 async function loadConfig() {
-  if (!db) return;
+  if (!db) { console.warn('loadConfig: db not available'); return; }
   try {
     const snap = await db.collection('config').doc('api').get();
-    if (snap.exists) geminiApiKey = snap.data().gemini_key || null;
+    if (snap.exists) {
+      geminiApiKey = snap.data().gemini_key || null;
+      if (!geminiApiKey) console.warn('loadConfig: gemini_key field is empty');
+    } else {
+      console.warn('loadConfig: config/api document does not exist');
+    }
   } catch(e) {
-    console.warn('Could not load config:', e);
+    console.warn('loadConfig error:', e.code, e.message);
+    showToast(`Config error: ${e.code || e.message}`);
   }
 }
 
