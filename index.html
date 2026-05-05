@@ -439,7 +439,7 @@ async function saveToFirestore(data) {
   if (!db) return; // no Firestore — offline mode
   setSyncStatus('syncing');
   try {
-    await docRef.set(data, { merge: true });
+    await docRef.set(data);
     setSyncStatus('synced');
   } catch (e) {
     console.error('Firestore save error:', e);
