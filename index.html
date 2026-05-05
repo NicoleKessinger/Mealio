@@ -499,7 +499,7 @@ async function loadConfig() {
 
 async function callGemini(parts, maxTokens = 1500) {
   if (!geminiApiKey) throw new Error('AI features unavailable — config not loaded');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
   const body = {
     contents: [{ parts }],
     generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
