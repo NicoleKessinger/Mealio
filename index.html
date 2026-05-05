@@ -324,14 +324,11 @@
         <button class="action-btn sage" id="scan-btn" style="display:none" onclick="scanPhoto()">Extract ingredients →</button>
       </div>
       <div class="sub-form" id="form-link">
-        <div class="sub-form-title">Link or text <button class="sub-form-close" onclick="toggleSubForm(null)">×</button></div>
-        <div class="link-hint"><strong>Paste a URL</strong> from any recipe site, or paste the <strong>recipe text directly</strong> if paywalled.</div>
-        <label>Recipe URL</label><input id="link-url" type="url" placeholder="https://www.seriouseats.com/recipe..."/>
-        <button class="action-btn sage" id="fetch-btn" onclick="fetchFromUrl()">Extract from URL →</button>
-        <div class="or-divider">or paste text instead</div>
+        <div class="sub-form-title">Paste recipe <button class="sub-form-close" onclick="toggleSubForm(null)">×</button></div>
+        <div class="link-hint">Copy the full recipe text from any site or cookbook and paste it below.</div>
         <label>Recipe text</label>
-        <textarea id="link-text" style="height:80px" placeholder="Paste the full recipe text here..."></textarea>
-        <button class="action-btn" id="link-extract-btn" onclick="extractFromText()" style="margin-top:0">Extract ingredients →</button>
+        <textarea id="link-text" style="height:100px" placeholder="Paste the full recipe text here..."></textarea>
+        <button class="action-btn sage" id="link-extract-btn" onclick="extractFromText()">Extract ingredients →</button>
       </div>
       <div class="sub-form" id="form-generate">
         <div class="sub-form-title">Create a recipe <button class="sub-form-close" onclick="toggleSubForm(null)">×</button></div>
@@ -350,7 +347,7 @@
       <div class="add-meal-options">
         <button class="add-option-btn" id="opt-manual" onclick="toggleSubForm('manual')"><span class="add-option-icon">✏️</span><span class="add-option-label">Type it in</span></button>
         <button class="add-option-btn" id="opt-scan" onclick="toggleSubForm('scan')"><span class="add-option-icon">📷</span><span class="add-option-label">Scan recipe</span></button>
-        <button class="add-option-btn" id="opt-link" onclick="toggleSubForm('link')"><span class="add-option-icon">🔗</span><span class="add-option-label">Link or text</span></button>
+        <button class="add-option-btn" id="opt-link" onclick="toggleSubForm('link')"><span class="add-option-icon">📋</span><span class="add-option-label">Paste recipe</span></button>
         <button class="add-option-btn" id="opt-generate" onclick="toggleSubForm('generate')"><span class="add-option-icon">✨</span><span class="add-option-label">Create recipe</span></button>
       </div>
     </div>
@@ -560,7 +557,7 @@ const CATEGORIES = {
 let meals = loadMealsLocal(), addedMeals = loadAddedLocal(), oneOffs = loadOneOffsLocal();
 let checkedItems = {}, mealColorMap = {}, itemQtyOverrides = {}, excludedItems = new Set();
 let edIngredients = [], edSteps = [], addToListOn = true;
-let currentPhotoBase64 = null, editingMealName = null;
+let currentPhotoBase64 = null, currentPhotoMimeType = null, editingMealName = null;
 
 // ── HELPERS ──
 function getCategory(i) { const l = i.toLowerCase(); for (const [k,c] of Object.entries(CATEGORIES)) { if (k==='other') continue; if (c.items.some(x => l.includes(x))) return k; } return 'other'; }
@@ -796,6 +793,7 @@ function openEditorFromManual() {
 // ── GEMINI AI FEATURES ──
 function onPhotoSelected(input) {
   const file = input.files[0]; if (!file) return;
+  currentPhotoMimeType = file.type || 'image/jpeg';
   const reader = new FileReader();
   reader.onload = e => { currentPhotoBase64 = e.target.result.split(',')[1]; const p = document.getElementById('photo-preview'); p.src=e.target.result; p.style.display='block'; document.getElementById('scan-btn').style.display='flex'; };
   reader.readAsDataURL(file);
@@ -806,7 +804,7 @@ async function scanPhoto() {
   setLoading('scan-btn', true, 'Extract ingredients →');
   try {
     const text = await callGemini([
-      { inline_data: { mime_type: 'image/jpeg', data: currentPhotoBase64 } },
+      { inline_data: { mime_type: currentPhotoMimeType, data: currentPhotoBase64 } },
       { text: EXTRACT_PROMPT }
     ]);
     openEditor(parseJSON(text));
