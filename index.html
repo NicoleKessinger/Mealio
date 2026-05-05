@@ -519,7 +519,9 @@ function parseJSON(t) {
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
   if (start === -1 || end === -1) throw new Error('No JSON object found in response');
-  return JSON.parse(cleaned.slice(start, end + 1));
+  const jsonStr = cleaned.slice(start, end + 1)
+    .replace(/,\s*([}\]])/g, '$1');  // strip trailing commas
+  return JSON.parse(jsonStr);
 }
 
 const EXTRACT_PROMPT = `Extract the recipe from this content. Return ONLY valid JSON:
