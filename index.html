@@ -479,6 +479,7 @@ async function loadFromFirestore() {
     meals = loadMealsLocal();
     addedMeals = loadAddedLocal();
     oneOffs = loadOneOffsLocal();
+    excludedItems = loadExcludedLocal();
     return;
   }
   try {
@@ -488,6 +489,7 @@ async function loadFromFirestore() {
       if (data.meals) meals = data.meals;
       if (data.addedMeals) addedMeals = data.addedMeals;
       if (data.oneOffs) oneOffs = data.oneOffs;
+      if (data.excludedItems) excludedItems = new Set(data.excludedItems);
     }
     setSyncStatus('synced');
   } catch (e) {
@@ -496,6 +498,7 @@ async function loadFromFirestore() {
     meals = loadMealsLocal();
     addedMeals = loadAddedLocal();
     oneOffs = loadOneOffsLocal();
+    excludedItems = loadExcludedLocal();
   }
 }
 
@@ -504,7 +507,8 @@ function persistAll() {
   saveMealsLocal(meals);
   saveAddedLocal(addedMeals);
   saveOneOffsLocal(oneOffs);
-  saveToFirestore({ meals, addedMeals, oneOffs, updatedAt: new Date().toISOString() });
+  saveExcludedLocal(excludedItems);
+  saveToFirestore({ meals, addedMeals, oneOffs, excludedItems: [...excludedItems], updatedAt: new Date().toISOString() });
 }
 
 // ── GEMINI AI ──
@@ -576,7 +580,7 @@ Return ONLY valid JSON:
 Return ONLY valid JSON, nothing else.`;
 
 // ── LOCAL STORAGE FALLBACK ──
-const STORAGE_KEY = 'grocery_meals_v2', ADDED_KEY = 'grocery_added_v2', ONEOFF_KEY = 'grocery_oneoff_v2';
+const STORAGE_KEY = 'grocery_meals_v2', ADDED_KEY = 'grocery_added_v2', ONEOFF_KEY = 'grocery_oneoff_v2', EXCLUDED_KEY = 'grocery_excluded_v2';
 function loadMealsLocal() {
   try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch (e) {}
   return {
@@ -592,6 +596,8 @@ function loadAddedLocal() { try { return JSON.parse(localStorage.getItem(ADDED_K
 function saveAddedLocal(a) { localStorage.setItem(ADDED_KEY, JSON.stringify(a)); }
 function loadOneOffsLocal() { try { return JSON.parse(localStorage.getItem(ONEOFF_KEY)) || []; } catch (e) { return []; } }
 function saveOneOffsLocal(o) { localStorage.setItem(ONEOFF_KEY, JSON.stringify(o)); }
+function loadExcludedLocal() { try { return new Set(JSON.parse(localStorage.getItem(EXCLUDED_KEY)) || []); } catch (e) { return new Set(); } }
+function saveExcludedLocal(s) { localStorage.setItem(EXCLUDED_KEY, JSON.stringify([...s])); }
 
 // ── APP STATE ──
 const TAG_COLORS = [{bg:'#EBF0E7',border:'#B8CEB0',text:'#3B6D11'},{bg:'#F5EAE4',border:'#DBA898',text:'#7A3520'},{bg:'#E6F1FB',border:'#A8C8EE',text:'#185FA5'},{bg:'#FAEEDA',border:'#EAC87A',text:'#7A5010'},{bg:'#EEEDFE',border:'#C0BCF4',text:'#3C3489'}];
@@ -607,7 +613,7 @@ const CATEGORIES = {
 };
 
 let meals = loadMealsLocal(), addedMeals = loadAddedLocal(), oneOffs = loadOneOffsLocal();
-let checkedItems = {}, mealColorMap = {}, itemQtyOverrides = {}, excludedItems = new Set();
+let checkedItems = {}, mealColorMap = {}, itemQtyOverrides = {}, excludedItems = loadExcludedLocal();
 let edIngredients = [], edSteps = [], addToListOn = true;
 let currentPhotoBase64 = null, currentPhotoMimeType = null, editingMealName = null;
 
