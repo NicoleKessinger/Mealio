@@ -621,6 +621,12 @@ function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 function toSentenceCase(s) { if (!s) return s; return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
 function buildColorMap() { mealColorMap = {}; addedMeals.forEach((m,i) => { mealColorMap[m] = TAG_COLORS[i % TAG_COLORS.length]; }); }
 
+// ── MEAL DATA ACCESSORS (backward-compatible: legacy meals are plain arrays) ──
+function getMealIngredients(m) { if (!m) return []; return Array.isArray(m) ? m : (m.ingredients || []); }
+function getMealSteps(m)       { if (!m || Array.isArray(m)) return []; return m.steps || []; }
+function getMealServings(m)    { if (!m || Array.isArray(m)) return ''; return m.servings || ''; }
+function getMealTime(m)        { if (!m || Array.isArray(m)) return ''; return m.time || ''; }
+
 // ── TAB / UI ──
 function switchTab(tab, btn) { document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active')); document.getElementById('panel-' + tab).classList.add('active'); hideSuggestions(); localStorage.setItem('mealio_tab', tab); }
 function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2800); }
@@ -673,7 +679,7 @@ function ingQty(i)  { return typeof i === 'string' ? '' : (i.qty || ''); }
 function buildIngredientMap() {
   const map = {};
   for (const meal of addedMeals) {
-    for (const ing of (meals[meal] || [])) {
+    for (const ing of getMealIngredients(meals[meal])) {
       const name = ingItem(ing);
       const qty  = ingQty(ing);
       const key  = name.toLowerCase().trim();
@@ -743,7 +749,8 @@ function renderList() {
 function renderModalMeals() {
   const el = document.getElementById('modal-meal-list'); const entries = Object.entries(meals);
   if (!entries.length) { el.innerHTML = '<p style="font-size:13px;color:var(--ink3);font-style:italic;margin-bottom:8px">No meals yet. Add your first one below.</p>'; return; }
-  el.innerHTML = entries.map(([name,ings],i) => {
+  el.innerHTML = entries.map(([name,meal],i) => {
+    const ings = getMealIngredients(meal); const steps = getMealSteps(meal);
     const c = TAG_COLORS[i % TAG_COLORS.length]; const inList = addedMeals.includes(name);
     const viewId = 'meal-view-' + name.replace(/[^a-z0-9]/g,'_');
     return `<div class="modal-meal">
@@ -757,7 +764,10 @@ function renderModalMeals() {
         </div>
       </div>
       <div class="modal-ingredients">${ings.slice(0,5).map(ingItem).join(' · ')}${ings.length > 5 ? ` · +${ings.length-5} more` : ''}</div>
-      <div class="meal-view-ings" id="${viewId}">${ings.map(ing => { const qty = ingQty(ing); return `<div>· ${esc(toSentenceCase(ingItem(ing)))}${qty ? `<span style="color:var(--ink3);font-size:11px;margin-left:5px">${esc(qty)}</span>` : ''}</div>`; }).join('')}</div>
+      <div class="meal-view-ings" id="${viewId}">
+        ${ings.map(ing => { const qty = ingQty(ing); return `<div>· ${esc(toSentenceCase(ingItem(ing)))}${qty ? `<span style="color:var(--ink3);font-size:11px;margin-left:5px">${esc(qty)}</span>` : ''}</div>`; }).join('')}
+        ${steps.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:500;color:var(--ink3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Instructions</div>${steps.map((s,n) => `<div style="font-size:12px;color:var(--ink2);line-height:1.6;margin-bottom:4px"><span style="color:var(--sage);font-weight:600">${n+1}.</span> ${esc(s)}</div>`).join('')}` : ''}
+      </div>
     </div>`;
   }).join('');
 }
@@ -825,10 +835,11 @@ function openEditor(recipe, isEditing=false) {
   renderEdIngredients(); renderEdSteps();
 }
 function editMeal(name) {
-  const ings = (meals[name] || []).map(i =>
+  const meal = meals[name];
+  const ings = getMealIngredients(meal).map(i =>
     typeof i === 'string' ? {qty: '', item: i} : {qty: i.qty || '', item: i.item || ''}
   );
-  openEditor({name, servings:'', time:'', ingredients: ings, steps:[]}, true);
+  openEditor({name, servings: getMealServings(meal), time: getMealTime(meal), ingredients: ings, steps: getMealSteps(meal)}, true);
 }
 function closeEditor() { document.getElementById('editor-overlay').classList.remove('open'); document.getElementById('modal-overlay').classList.remove('behind'); editingMealName = null; }
 function closeEditorAndModal() { document.getElementById('editor-overlay').classList.remove('open'); document.getElementById('modal-overlay').classList.remove('open'); document.getElementById('modal-overlay').classList.remove('behind'); toggleSubForm(null); editingMealName = null; }
@@ -865,9 +876,12 @@ function saveFromEditor() {
   if (!name) { document.getElementById('ed-name').focus(); showToast('Give the recipe a name'); return; }
   if (!edIngredients.length) { showToast('Add at least one ingredient'); return; }
   if (editingMealName && editingMealName !== name) { delete meals[editingMealName]; const idx = addedMeals.indexOf(editingMealName); if (idx > -1) { addedMeals[idx] = name; } }
-  meals[name] = edIngredients
-    .map(i => ({qty: (i.qty||'').trim(), item: (i.item||'').trim()}))
-    .filter(i => i.item);
+  meals[name] = {
+    ingredients: edIngredients.map(i => ({qty:(i.qty||'').trim(), item:(i.item||'').trim()})).filter(i => i.item),
+    steps: edSteps.filter(Boolean),
+    servings: document.getElementById('ed-servings').value.trim(),
+    time: document.getElementById('ed-time').value.trim()
+  };
   if (!editingMealName && addToListOn && !addedMeals.includes(name)) { addedMeals.push(name); }
   persistAll(); buildColorMap(); renderChips(); renderList(); closeEditorAndModal();
   currentPhotoBase64 = null; document.getElementById('photo-preview').style.display='none'; document.getElementById('scan-btn').style.display='none';
